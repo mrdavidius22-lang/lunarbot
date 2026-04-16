@@ -1,0 +1,260 @@
+const { logger } = require("../utils/logger");
+
+const MONTH_SLUGS = [
+  "yanvar",
+  "fevral",
+  "mart",
+  "aprel",
+  "may",
+  "iyun",
+  "iyul",
+  "avgust",
+  "sentyabr",
+  "oktyabr",
+  "noyabr",
+  "dekabr"
+];
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function getMoscowDateParts(date = new Date()) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Moscow",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  });
+
+  const parts = formatter.formatToParts(date);
+  const getPart = (type) => parts.find((item) => item.type === type)?.value;
+
+  return {
+    year: Number(getPart("year")),
+    month: Number(getPart("month")),
+    day: Number(getPart("day"))
+  };
+}
+
+function buildMonthUrl(year, month) {
+  const monthSlug = MONTH_SLUGS[month - 1];
+
+  if (!monthSlug) {
+    throw new Error(`Unsupported month index: ${month}`);
+  }
+
+  return `https://astrosfera.ru/lunnyj-kalendar-strizhek/lunnyj-kalendar-strizhek-na-${monthSlug}-${year}.html`;
+}
+
+function decodeHtml(html) {
+  return html
+    .replace(/&nbsp;/g, " ")
+    .replace(/&ndash;/g, "-")
+    .replace(/&mdash;/g, "-")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/\r/g, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<[^>]+>/g, "\n");
+}
+
+function normalizeLines(text) {
+  return text
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
+function isDateLine(line) {
+  return /^\d{1,2} [а-яё]+ \d{4},/i.test(line);
+}
+
+function isStatusLine(line) {
+  return /день для стрижки и окрашивания волос/i.test(line);
+}
+
+function isPhaseLine(line) {
+  return /растущая луна|убывающая луна|полнолуние|новолуние|первая четверть|последняя четверть/i.test(line);
+}
+
+function isZodiacLine(line) {
+  return /луна в|луна во/i.test(line);
+}
+
+function isTimeLine(line) {
+  return /^\d{1,2}:\d{2}$/.test(line);
+}
+
+function extractEntries(text) {
+  const lines = normalizeLines(text);
+  const entries = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+
+    if (!isDateLine(line)) {
+      continue;
+    }
+
+    const details = [];
+    let cursor = index + 1;
+
+    while (cursor < lines.length && !isDateLine(lines[cursor])) {
+      details.push(lines[cursor]);
+      cursor += 1;
+    }
+
+    const lunarDay = details.find((item) => /лунный день/i.test(item)) || "Нет данных";
+    const zodiacIndex = details.findIndex((item) => isZodiacLine(item));
+    const zodiac = zodiacIndex >= 0 ? details[zodiacIndex] : "Нет данных";
+    const zodiacTime =
+      zodiacIndex >= 0 && isTimeLine(details[zodiacIndex + 1])
+        ? details[zodiacIndex + 1]
+        : "Нет данных";
+    const phase = details.find((item) => isPhaseLine(item)) || "Нет данных";
+    const recommendation =
+      details.find((item) => isStatusLine(item)) || "Нет данных";
+
+    entries.push({
+      dateLabel: line,
+      day: Number(line.split(" ")[0]),
+      lunarDay,
+      zodiac,
+      zodiacTime,
+      phase,
+      recommendation
+    });
+
+    index = cursor - 1;
+  }
+
+  return entries;
+}
+
+async function loadMonthEntries(date = new Date()) {
+  const { year, month, day } = getMoscowDateParts(date);
+  const url = buildMonthUrl(year, month);
+
+  logger.info("Loading haircut calendar:", url);
+
+  const response = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 MoonFadeBot/1.0"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Astrosfera returned status ${response.status}`);
+  }
+
+  const html = await response.text();
+  const text = decodeHtml(html);
+  const entries = extractEntries(text);
+
+  if (!entries.length) {
+    throw new Error("Could not parse haircut calendar page");
+  }
+
+  return {
+    year,
+    month,
+    day,
+    url,
+    entries
+  };
+}
+
+function formatEntry(entry) {
+  const recommendationText = escapeHtml(entry.recommendation);
+  const timeLine = entry.zodiacTime !== "Нет данных"
+    ? `• <b>Время перехода:</b> ${escapeHtml(entry.zodiacTime)}`
+    : null;
+  const haircutLine = /неблагоприятный/i.test(entry.recommendation)
+    ? `❌ <b>Стрижка:</b> лучше отложить\n✂️ <b>Прогноз:</b> ${recommendationText}`
+    : /очень благоприятный|благоприятный/i.test(entry.recommendation)
+      ? `✅ <b>Стрижка:</b> можно смело стричься\n✂️ <b>Прогноз:</b> ${recommendationText}`
+      : `☑️ <b>Стрижка:</b> день нейтральный\n✂️ <b>Прогноз:</b> ${recommendationText}`;
+
+  return [
+    `📅 <b>${escapeHtml(entry.dateLabel)}</b>`,
+    "",
+    `🌒 <b>Лунный день:</b> ${escapeHtml(entry.lunarDay)}`,
+    `♎ <b>Луна в знаке:</b> ${escapeHtml(entry.zodiac)}`,
+    timeLine,
+    `🌗 <b>Фаза Луны:</b> ${escapeHtml(entry.phase)}`,
+    haircutLine
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function splitMonthEntriesIntoMessages(entries, title, url) {
+  const maxLength = 3500;
+  const messages = [];
+  let currentMessage = `${title}\n\n`;
+
+  for (const entry of entries) {
+    const block = `${formatEntry(entry)}\n\n`;
+
+    if ((currentMessage + block + `\n🔗 <b>Источник:</b> ${url}`).length > maxLength) {
+      messages.push(currentMessage.trim());
+      currentMessage = `${title}\n\n${block}`;
+      continue;
+    }
+
+    currentMessage += block;
+  }
+
+  currentMessage += `🔗 <b>Источник:</b> ${url}`;
+  messages.push(currentMessage.trim());
+
+  return messages;
+}
+
+const haircutCalendarService = {
+  async getTodaySummary() {
+    try {
+      const { day, month, year, entries, url } = await loadMonthEntries();
+      const todayEntry = entries.find((entry) => entry.day === day);
+
+      if (!todayEntry) {
+        return `Не удалось найти прогноз на ${day}.${month}.${year}.`;
+      }
+
+        return [
+        "🌙 <b>Прогноз на сегодня</b>",
+        formatEntry(todayEntry),
+        "",
+        `🔗 <b>Источник:</b> ${url}`
+      ].join("\n");
+    } catch (error) {
+      logger.error("Failed to load today haircut summary:", error);
+      return "Не удалось получить календарь стрижек с сайта прямо сейчас. Попробуй чуть позже.";
+    }
+  },
+
+  async getMonthSummary() {
+    try {
+      const { month, year, entries, url } = await loadMonthEntries();
+      return splitMonthEntriesIntoMessages(
+        entries,
+        `✨ <b>Лунный календарь стрижек на ${String(month).padStart(2, "0")}.${year}</b>`,
+        url
+      );
+    } catch (error) {
+      logger.error("Failed to load month haircut summary:", error);
+      return ["Не удалось получить календарь месяца с сайта прямо сейчас. Попробуй чуть позже."];
+    }
+  }
+};
+
+module.exports = {
+  haircutCalendarService
+};
