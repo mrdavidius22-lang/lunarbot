@@ -1,19 +1,21 @@
 const {
   isMainMenuText,
-  mainKeyboard
+  mainKeyboard,
+  languageKeyboard,
+  getMenuLabels
 } = require("../../keyboards/main.keyboard");
 const { botService } = require("../../services/bot.service");
 const {
   haircutCalendarService
 } = require("../../services/haircut-calendar.service");
-const { MENU_LABELS } = require("../../keyboards/main.keyboard");
+const { userService } = require("../../services/user.service");
 
-async function replyWithMessages(ctx, messages) {
+async function replyWithMessages(ctx, messages, locale) {
   for (const [index, message] of messages.entries()) {
     await ctx.reply(
       message,
       index === messages.length - 1
-        ? { ...mainKeyboard(), parse_mode: "HTML" }
+        ? { ...mainKeyboard(locale), parse_mode: "HTML" }
         : { parse_mode: "HTML" }
     );
   }
@@ -21,36 +23,61 @@ async function replyWithMessages(ctx, messages) {
 
 async function handleTextMessage(ctx) {
   const userText = ctx.message.text.trim();
+  const locale = await userService.getLocale(ctx);
+  const labels = getMenuLabels(locale);
 
-  if (isMainMenuText(userText, MENU_LABELS.help)) {
-    await ctx.reply(botService.getHelpText(), { ...mainKeyboard(), parse_mode: "HTML" });
+  if (isMainMenuText(userText, labels.help)) {
+    await ctx.reply(botService.getHelpText(locale), { ...mainKeyboard(locale), parse_mode: "HTML" });
     return;
   }
 
-  if (isMainMenuText(userText, MENU_LABELS.profile)) {
-    const profile = botService.getUserProfile(ctx.from);
-    await ctx.reply(profile, { ...mainKeyboard(), parse_mode: "HTML" });
+  if (isMainMenuText(userText, labels.profile)) {
+    const savedUser = await userService.getUserById(ctx.from?.id);
+    const profile = botService.getUserProfile({ ...ctx.from, ...savedUser }, locale);
+    await ctx.reply(profile, { ...mainKeyboard(locale), parse_mode: "HTML" });
     return;
   }
 
-  if (isMainMenuText(userText, MENU_LABELS.about)) {
-    await ctx.reply(botService.getAboutText(), { ...mainKeyboard(), parse_mode: "HTML" });
+  if (isMainMenuText(userText, labels.about)) {
+    await ctx.reply(botService.getAboutText(locale), { ...mainKeyboard(locale), parse_mode: "HTML" });
     return;
   }
 
-  if (isMainMenuText(userText, MENU_LABELS.today)) {
-    const result = await haircutCalendarService.getTodaySummary();
-    await ctx.reply(result, { ...mainKeyboard(), parse_mode: "HTML" });
+  if (isMainMenuText(userText, labels.language)) {
+    await ctx.reply(botService.getLanguagePrompt(locale), { ...languageKeyboard(locale), parse_mode: "HTML" });
     return;
   }
 
-  if (isMainMenuText(userText, MENU_LABELS.month)) {
-    const messages = await haircutCalendarService.getMonthSummary();
-    await replyWithMessages(ctx, messages);
+  if (isMainMenuText(userText, labels.russian)) {
+    await userService.setLocale(ctx, "ru");
+    await ctx.reply(botService.getLanguageChangedText("ru", "ru"), { ...mainKeyboard("ru"), parse_mode: "HTML" });
     return;
   }
 
-  await ctx.reply(botService.buildUnknownMessage(), { ...mainKeyboard(), parse_mode: "HTML" });
+  if (isMainMenuText(userText, labels.english)) {
+    await userService.setLocale(ctx, "en");
+    await ctx.reply(botService.getLanguageChangedText("en", "en"), { ...mainKeyboard("en"), parse_mode: "HTML" });
+    return;
+  }
+
+  if (isMainMenuText(userText, labels.back)) {
+    await ctx.reply(botService.getHelpText(locale), { ...mainKeyboard(locale), parse_mode: "HTML" });
+    return;
+  }
+
+  if (isMainMenuText(userText, labels.today)) {
+    const result = await haircutCalendarService.getTodaySummary(locale);
+    await ctx.reply(result, { ...mainKeyboard(locale), parse_mode: "HTML" });
+    return;
+  }
+
+  if (isMainMenuText(userText, labels.month)) {
+    const messages = await haircutCalendarService.getMonthSummary(locale);
+    await replyWithMessages(ctx, messages, locale);
+    return;
+  }
+
+  await ctx.reply(botService.buildUnknownMessage(locale), { ...mainKeyboard(locale), parse_mode: "HTML" });
 }
 
 module.exports = {

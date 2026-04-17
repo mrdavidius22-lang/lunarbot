@@ -2,8 +2,13 @@ const users = new Map();
 
 const memoryStorage = {
   async setUser(user) {
-    users.set(user.id, user);
-    return user;
+    const nextUser = {
+      ...(users.get(user.id) || {}),
+      ...user
+    };
+
+    users.set(user.id, nextUser);
+    return nextUser;
   },
 
   async getUserById(id) {

@@ -1,76 +1,43 @@
 const { BOT_NAME } = require("../config/env");
+const { getDictionary, normalizeLocale } = require("../locales");
 
 const botService = {
-  getHelpText() {
+  getHelpText(locale = "ru") {
+    return getDictionary(locale).help(BOT_NAME);
+  },
+
+  getAboutText(locale = "ru") {
+    return getDictionary(locale).about(BOT_NAME);
+  },
+
+  getUserProfile(user, locale = "ru") {
+    const dictionary = getDictionary(locale).profile;
+    const currentLocale = normalizeLocale(user?.preferredLocale || user?.languageCode || locale);
+
     return [
-      `💡 <b>${BOT_NAME}</b> подсказывает удачные дни для стрижки по лунному календарю.`,
+      dictionary.title,
       "",
-      "<b>Команды:</b>",
-      "• <b>/start</b> - приветствие",
-      "• <b>/today</b> - прогноз на сегодня",
-      "• <b>/month</b> - полный календарь месяца",
-      "• <b>/help</b> - помощь",
-      "• <b>/menu</b> - показать меню",
-      "",
-      "<b>Кнопки:</b>",
-      "🌙 Сегодня - текущий день",
-      "✨ Календарь месяца - все дни месяца",
-      "🌸 О боте - зачем нужен MoonFade",
-      "👤 Профиль - данные Telegram",
-      "💡 Помощь - краткая инструкция"
+      `• <b>${dictionary.id}:</b> ${user?.id || "-"}`,
+      `• <b>${dictionary.name}:</b> ${user?.first_name || user?.firstName || "-"}`,
+      `• <b>${dictionary.username}:</b> ${user?.username ? `@${user.username}` : "-"}`,
+      `• <b>${dictionary.language}:</b> ${currentLocale === "en" ? "English" : "Русский"}`
     ].join("\n");
   },
 
-  getAboutText() {
-    return [
-      `🌸 <b>О боте ${BOT_NAME}</b>`,
-      "",
-      `✨ <b>${BOT_NAME}</b> создан для тех, кто любит ухаживать за собой красиво, мягко и с ощущением правильного момента.`,
-      "",
-      "Иногда хочется не просто записаться на стрижку, а выбрать день, который ощущается особенно удачным и легким:",
-      "🌙 когда настроение спокойнее",
-      "✨ когда хочется обновления",
-      "💫 когда тянет к переменам",
-      "🪞 когда хочется почувствовать себя еще красивее",
-      "🌿 когда хочется попасть в более гармоничный ритм",
-      "",
-      "💎 <b>Чем полезен этот бот:</b>",
-      "✂️ показывает, насколько день благоприятен для стрижки и окрашивания",
-      "🌒 подсказывает лунный день, знак Зодиака и фазу Луны",
-      "📅 помогает быстро посмотреть весь месяц и выбрать самый приятный момент",
-      "🔮 добавляет ощущение ритуала, красоты и внимания к себе",
-      "",
-      "🫶 <b>Почему это приятно:</b>",
-      "Иногда даже маленькое решение, принятое в красивый и удачный день, ощущается совсем по-другому.",
-      "Стрижка становится не просто делом из списка, а моментом обновления, легкости и заботы о себе.",
-      "",
-      "🌸 Это не просто сухой календарь, а маленький красивый помощник, который помогает выбирать с настроением, вниманием к себе и каплей магии.",
-      "",
-      "MoonFade - это про стиль, ритм, внутреннее ощущение удачного дня и ту самую приятную уверенность: <b>сегодня именно тот момент</b>."
-    ].join("\n");
+  buildUnknownMessage(locale = "ru") {
+    return getDictionary(locale).unknown;
   },
 
-  getUserProfile(user) {
-    return [
-      "👤 <b>Твой профиль</b>",
-      "",
-      `• <b>ID:</b> ${user?.id || "неизвестно"}`,
-      `• <b>Имя:</b> ${user?.first_name || "неизвестно"}`,
-      `• <b>Username:</b> ${user?.username ? `@${user.username}` : "не указан"}`
-    ].join("\n");
+  getStartText(firstName, locale = "ru") {
+    return getDictionary(locale).start(BOT_NAME, firstName);
   },
 
-  buildUnknownMessage() {
-    return [
-      "✨ <b>Я пока не понял это сообщение</b>",
-      "",
-      "Попробуй одну из команд:",
-      "• <b>/today</b>",
-      "• <b>/month</b>",
-      "• <b>/help</b>",
-      "",
-      "Или просто нажми кнопку на клавиатуре ниже."
-    ].join("\n");
+  getLanguagePrompt(locale = "ru") {
+    return getDictionary(locale).languagePrompt;
+  },
+
+  getLanguageChangedText(viewLocale = "ru", selectedLocale = "ru") {
+    return getDictionary(viewLocale).languageChanged[selectedLocale];
   }
 };
 

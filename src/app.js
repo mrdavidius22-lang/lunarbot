@@ -13,11 +13,15 @@ function createBot() {
   registerCommandHandlers(bot);
   registerMessageHandlers(bot);
 
-  bot.catch((error, ctx) => {
+  bot.catch(async (error, ctx) => {
     logger.error("Bot error:", error);
 
     if (ctx?.reply) {
-      return ctx.reply("Something went wrong. Please try again later.");
+      try {
+        await ctx.reply("Произошла ошибка. Попробуй еще раз чуть позже.");
+      } catch (replyError) {
+        logger.error("Failed to send fallback error message:", replyError);
+      }
     }
   });
 

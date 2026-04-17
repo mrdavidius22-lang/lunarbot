@@ -7,6 +7,14 @@ const userRepository = {
 
   async findById(id) {
     return memoryStorage.getUserById(id);
+  },
+
+  async updateLocale(id, preferredLocale) {
+    return memoryStorage.setUser({
+      ...(await memoryStorage.getUserById(id)),
+      id,
+      preferredLocale
+    });
   }
 };
 

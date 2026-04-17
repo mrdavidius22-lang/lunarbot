@@ -1,30 +1,17 @@
 const { mainKeyboard } = require("../../keyboards/main.keyboard");
 const { userService } = require("../../services/user.service");
-const { BOT_NAME } = require("../../config/env");
+const { botService } = require("../../services/bot.service");
 
 async function handleStartCommand(ctx) {
-  const firstName = ctx.from?.first_name || "друг";
+  const firstName = ctx.from?.first_name || "friend";
 
   await userService.upsertUser(ctx.from);
+  const locale = await userService.getLocale(ctx);
 
   await ctx.reply(
-    [
-      `<b>Привет, ${firstName}!</b>`,
-      "",
-      `✨ <b>Я ${BOT_NAME}</b>`,
-      "Подскажу, когда стрижка будет особенно удачной по лунному календарю.",
-      "",
-      "<b>Что я умею:</b>",
-      "• /today - красивый прогноз на сегодня",
-      "• /month - весь календарь стрижек на месяц",
-      "• кнопка <b>🌸 О боте</b> - расскажет, зачем нужен MoonFade",
-      "• /help - подсказка по командам",
-      "• /menu - показать клавиатуру",
-      "",
-      "Нажми кнопку ниже и начнем ✂️"
-    ].join("\n"),
+    botService.getStartText(firstName, locale),
     {
-      ...mainKeyboard(),
+      ...mainKeyboard(locale),
       parse_mode: "HTML"
     }
   );

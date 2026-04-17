@@ -1,21 +1,24 @@
 const { Markup } = require("telegraf");
+const { getDictionary } = require("../locales");
 
-const MENU_LABELS = {
-  today: "🌙 Сегодня",
-  month: "✨ Календарь месяца",
-  about: "🌸 О боте",
-  profile: "👤 Профиль",
-  help: "💡 Помощь"
-};
+function getMenuLabels(locale = "ru") {
+  return getDictionary(locale).buttons;
+}
 
-function mainKeyboard() {
+function mainKeyboard(locale = "ru") {
+  const buttons = getMenuLabels(locale);
   return Markup.keyboard(
     [
-      [MENU_LABELS.today, MENU_LABELS.month],
-      [MENU_LABELS.about],
-      [MENU_LABELS.profile, MENU_LABELS.help]
+      [buttons.today, buttons.month],
+      [buttons.about, buttons.language],
+      [buttons.profile, buttons.help]
     ]
   ).resize();
+}
+
+function languageKeyboard(locale = "ru") {
+  const buttons = getMenuLabels(locale);
+  return Markup.keyboard([[buttons.russian, buttons.english], [buttons.back]]).resize();
 }
 
 function removeKeyboard() {
@@ -27,8 +30,9 @@ function isMainMenuText(text, expectedLabel) {
 }
 
 module.exports = {
-  MENU_LABELS,
+  getMenuLabels,
   mainKeyboard,
+  languageKeyboard,
   removeKeyboard,
   isMainMenuText
 };

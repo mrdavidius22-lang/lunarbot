@@ -1,4 +1,5 @@
 const { logger } = require("../utils/logger");
+const { getDictionary, normalizeLocale } = require("../locales");
 
 const MONTH_SLUGS = [
   "yanvar",
@@ -20,6 +21,45 @@ function escapeHtml(value) {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+function translateDynamicText(value, locale) {
+  if (normalizeLocale(locale) === "ru") {
+    return value;
+  }
+
+  return String(value)
+    .replace("января", "January")
+    .replace("февраля", "February")
+    .replace("марта", "March")
+    .replace("апреля", "April")
+    .replace("мая", "May")
+    .replace("июня", "June")
+    .replace("июля", "July")
+    .replace("августа", "August")
+    .replace("сентября", "September")
+    .replace("октября", "October")
+    .replace("ноября", "November")
+    .replace("декабря", "December")
+    .replace(", Пн", ", Mon")
+    .replace(", Вт", ", Tue")
+    .replace(", Ср", ", Wed")
+    .replace(", Чт", ", Thu")
+    .replace(", Пт", ", Fri")
+    .replace(", Сб", ", Sat")
+    .replace(", Вс", ", Sun")
+    .replace("лунный день", "lunar day")
+    .replace("Луна в ", "Moon in ")
+    .replace("Луна во ", "Moon in ")
+    .replace("Растущая Луна", "Waxing Moon")
+    .replace("Убывающая Луна", "Waning Moon")
+    .replace("Полнолуние", "Full Moon")
+    .replace("Новолуние", "New Moon")
+    .replace("Первая четверть", "First Quarter")
+    .replace("Последняя четверть", "Last Quarter")
+    .replace("Очень благоприятный день для стрижки и окрашивания волос", "A very favorable day for haircut and hair coloring")
+    .replace("Благоприятный день для стрижки и окрашивания волос", "A favorable day for haircut and hair coloring")
+    .replace("Неблагоприятный день для стрижки и окрашивания волос", "An unfavorable day for haircut and hair coloring");
 }
 
 function getMoscowDateParts(date = new Date()) {
@@ -171,39 +211,41 @@ async function loadMonthEntries(date = new Date()) {
   };
 }
 
-function formatEntry(entry) {
-  const recommendationText = escapeHtml(entry.recommendation);
+function formatEntry(entry, locale = "ru") {
+  const calendar = getDictionary(locale).calendar;
+  const recommendationText = escapeHtml(translateDynamicText(entry.recommendation, locale));
   const timeLine = entry.zodiacTime !== "Нет данных"
-    ? `• <b>Время перехода:</b> ${escapeHtml(entry.zodiacTime)}`
+    ? `${calendar.zodiacTime} ${escapeHtml(entry.zodiacTime)}`
     : null;
   const haircutLine = /неблагоприятный/i.test(entry.recommendation)
-    ? `❌ <b>Стрижка:</b> лучше отложить\n✂️ <b>Прогноз:</b> ${recommendationText}`
+    ? `${calendar.haircutBad}\n${calendar.forecast} ${recommendationText}`
     : /очень благоприятный|благоприятный/i.test(entry.recommendation)
-      ? `✅ <b>Стрижка:</b> можно смело стричься\n✂️ <b>Прогноз:</b> ${recommendationText}`
-      : `☑️ <b>Стрижка:</b> день нейтральный\n✂️ <b>Прогноз:</b> ${recommendationText}`;
+      ? `${calendar.haircutGood}\n${calendar.forecast} ${recommendationText}`
+      : `${calendar.haircutNeutral}\n${calendar.forecast} ${recommendationText}`;
 
   return [
-    `📅 <b>${escapeHtml(entry.dateLabel)}</b>`,
+    `📅 <b>${escapeHtml(translateDynamicText(entry.dateLabel, locale))}</b>`,
     "",
-    `🌒 <b>Лунный день:</b> ${escapeHtml(entry.lunarDay)}`,
-    `♎ <b>Луна в знаке:</b> ${escapeHtml(entry.zodiac)}`,
+    `${calendar.lunarDay} ${escapeHtml(translateDynamicText(entry.lunarDay, locale))}`,
+    `${calendar.zodiac} ${escapeHtml(translateDynamicText(entry.zodiac, locale))}`,
     timeLine,
-    `🌗 <b>Фаза Луны:</b> ${escapeHtml(entry.phase)}`,
+    `${calendar.phase} ${escapeHtml(translateDynamicText(entry.phase, locale))}`,
     haircutLine
   ]
     .filter(Boolean)
     .join("\n");
 }
 
-function splitMonthEntriesIntoMessages(entries, title, url) {
+function splitMonthEntriesIntoMessages(entries, title, url, locale = "ru") {
+  const calendar = getDictionary(locale).calendar;
   const maxLength = 3500;
   const messages = [];
   let currentMessage = `${title}\n\n`;
 
   for (const entry of entries) {
-    const block = `${formatEntry(entry)}\n\n`;
+    const block = `${formatEntry(entry, locale)}\n\n`;
 
-    if ((currentMessage + block + `\n🔗 <b>Источник:</b> ${url}`).length > maxLength) {
+    if ((currentMessage + block + `\n${calendar.source} ${url}`).length > maxLength) {
       messages.push(currentMessage.trim());
       currentMessage = `${title}\n\n${block}`;
       continue;
@@ -212,45 +254,48 @@ function splitMonthEntriesIntoMessages(entries, title, url) {
     currentMessage += block;
   }
 
-  currentMessage += `🔗 <b>Источник:</b> ${url}`;
+  currentMessage += `${calendar.source} ${url}`;
   messages.push(currentMessage.trim());
 
   return messages;
 }
 
 const haircutCalendarService = {
-  async getTodaySummary() {
+  async getTodaySummary(locale = "ru") {
+    const calendar = getDictionary(locale).calendar;
     try {
       const { day, month, year, entries, url } = await loadMonthEntries();
       const todayEntry = entries.find((entry) => entry.day === day);
 
       if (!todayEntry) {
-        return `Не удалось найти прогноз на ${day}.${month}.${year}.`;
+        return calendar.notFound(day, month, year);
       }
 
-        return [
-        "🌙 <b>Прогноз на сегодня</b>",
-        formatEntry(todayEntry),
+      return [
+        calendar.todayTitle,
+        formatEntry(todayEntry, locale),
         "",
-        `🔗 <b>Источник:</b> ${url}`
+        `${calendar.source} ${url}`
       ].join("\n");
     } catch (error) {
       logger.error("Failed to load today haircut summary:", error);
-      return "Не удалось получить календарь стрижек с сайта прямо сейчас. Попробуй чуть позже.";
+      return calendar.todayError;
     }
   },
 
-  async getMonthSummary() {
+  async getMonthSummary(locale = "ru") {
+    const calendar = getDictionary(locale).calendar;
     try {
       const { month, year, entries, url } = await loadMonthEntries();
       return splitMonthEntriesIntoMessages(
         entries,
-        `✨ <b>Лунный календарь стрижек на ${String(month).padStart(2, "0")}.${year}</b>`,
-        url
+        calendar.monthTitle(String(month).padStart(2, "0"), year),
+        url,
+        locale
       );
     } catch (error) {
       logger.error("Failed to load month haircut summary:", error);
-      return ["Не удалось получить календарь месяца с сайта прямо сейчас. Попробуй чуть позже."];
+      return [calendar.monthError];
     }
   }
 };
