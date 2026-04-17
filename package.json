@@ -6,8 +6,7 @@
   "type": "commonjs",
   "scripts": {
     "start": "node src/bot.js",
-    "dev": "nodemon src/bot.js",
-    "start:webhook": "node src/bot.js"
+    "dev": "nodemon src/bot.js"
   },
   "keywords": [
     "telegram",
